@@ -1,20 +1,21 @@
-// import { cssBundleHref } from "@remix-run/css-bundle";
-// import type { LinksFunction } from "@remix-run/node";
 import {
-  Link,
   Links,
   LiveReload,
   Meta,
+  NavLink,
   Outlet,
   Scripts,
   ScrollRestoration,
 } from "@remix-run/react";
 import type { LinksFunction, MetaFunction } from "@remix-run/node";
-import styles from "~/shared.css";
-
-// export const links: LinksFunction = () => [
-//   ...(cssBundleHref ? [{ rel: "stylesheet", href: cssBundleHref }] : []),
-// ];
+import styles from "./tailwind.css";
+import {
+  DiscoverIcon,
+  HomeIcon,
+  RecipeBookIcon,
+  SettingsIcon,
+} from "./components/icons";
+import classNames from "classnames";
 
 export const meta: MetaFunction = () => {
   return [
@@ -36,18 +37,55 @@ export default function App() {
         <Meta />
         <Links />
       </head>
-      <body>
-        <nav>
-          <Link to="/">Home</Link>
-          <Link to="discover">Discover</Link>
-          <Link to="about">About</Link>
-          <Link to="settings">Settings</Link>
+      <body className="md:flex md:h-screen">
+        <nav className="bg-primary text-white">
+          <ul className="flex md:flex-col">
+            <AppNavLink to="/">
+              <HomeIcon />
+            </AppNavLink>
+            <AppNavLink to="discover">
+              <DiscoverIcon />
+            </AppNavLink>
+            <AppNavLink to="about">
+              <RecipeBookIcon />
+            </AppNavLink>
+            <AppNavLink to="settings">
+              <SettingsIcon />
+            </AppNavLink>
+          </ul>
         </nav>
-        <Outlet />
+        <div className="p-4">
+          <Outlet />
+        </div>
         <ScrollRestoration />
         <Scripts />
         <LiveReload />
       </body>
     </html>
+  );
+}
+
+type AppNavLinkProps = {
+  to: string;
+  children: React.ReactNode;
+};
+function AppNavLink({ to, children }: AppNavLinkProps) {
+  return (
+    <li className="w-16">
+      <NavLink to={to}>
+        {({ isActive }) => (
+          <div
+            className={classNames(
+              "py-4 flex justify-center hover:bg-primary-light",
+              {
+                "bg-primary-light": isActive,
+              }
+            )}
+          >
+            {children}
+          </div>
+        )}
+      </NavLink>
+    </li>
   );
 }
