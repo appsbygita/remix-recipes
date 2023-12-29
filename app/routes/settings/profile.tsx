@@ -1,5 +1,5 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import { useLoaderData, useRouteError } from "@remix-run/react";
 
 export function loader({ request }: LoaderFunctionArgs) {
   return json({ message: "Hi there" });
@@ -14,4 +14,15 @@ export default function Profile() {
       <p>Message: {data.message}</p>
     </div>
   );
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  if (error instanceof Error)
+    return (
+      <div className="bg-red-300 border-2 border-red-600 rounded-md p-4">
+        {error.message}
+      </div>
+    );
+  return <div>Generic message</div>;
 }
