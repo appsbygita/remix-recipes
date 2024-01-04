@@ -1,4 +1,5 @@
 import {
+  Link,
   Links,
   LiveReload,
   Meta,
@@ -6,9 +7,9 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
-  // useMatches,
   useNavigation,
   useResolvedPath,
+  useRouteError,
 } from "@remix-run/react";
 import type { LinksFunction, MetaFunction } from "@remix-run/node";
 import styles from "./tailwind.css";
@@ -19,7 +20,6 @@ import {
   SettingsIcon,
 } from "./components/icons";
 import classNames from "classnames";
-// import { useEffect } from "react";
 
 export const meta: MetaFunction = () => {
   return [
@@ -98,5 +98,32 @@ function AppNavLink({ to, children }: AppNavLinkProps) {
         )}
       </NavLink>
     </li>
+  );
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  return (
+    <html>
+      <head>
+        <title>Whoops!!</title>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <Meta />
+        <Links />
+      </head>
+      <body>
+        <div className="p-4">
+          <h1 className="text-2xl pb-3">Whoops!</h1>
+          <p>You're seeing this page because an unexpected error occurred.</p>
+          {error instanceof Error ? (
+            <p className="my-4 font-bold">{error.message}</p>
+          ) : null}
+          <Link to="/" className="text-primary">
+            Take me home
+          </Link>
+        </div>
+      </body>
+    </html>
   );
 }

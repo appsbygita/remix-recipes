@@ -25,7 +25,7 @@ export function PrimaryButton({ className, isLoading, ...props }: ButtonProps) {
       {...props}
       className={classNames(
         "text-white hover:bg-primary-light bg-primary",
-        isLoading ? "bg-primary-light" : " ",
+        isLoading ? "bg-primary-light" : "",
         className
       )}
     ></Button>
@@ -39,7 +39,8 @@ export function DeleteButton({ className, isLoading, ...props }: ButtonProps) {
       className={classNames(
         "border-2 border-red-600 text-red-600",
         "hover:bg-red-600 hover:text-white",
-        isLoading ? "border-red-400 text-red-400" : className
+        isLoading ? "border-red-400 text-red-400" : "",
+        className
       )}
     />
   );
