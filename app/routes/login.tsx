@@ -5,10 +5,9 @@ import {
 } from "@remix-run/node";
 import { useActionData } from "@remix-run/react";
 import { z } from "zod";
-import { ErrorMessage, PrimaryButton } from "~/components/form";
-import { generateMagicLink } from "~/magic-links.server";
+import { ErrorMessage, PrimaryButton, PrimaryInput } from "~/components/form";
+import { generateMagicLink, sendMagicLinkEmail } from "~/magic-links.server";
 import { commitSession, getSession } from "~/sessions";
-import { classNames } from "~/utils/misc";
 import { validateForm } from "~/utils/validation";
 import { v4 as uuid } from "uuid";
 
@@ -33,9 +32,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     loginSchema,
     async ({ email }) => {
       const nonce = uuid();
-      session.flash("nonce", nonce);
+      session.set("nonce", nonce);
       const link = generateMagicLink(email, nonce);
-      console.log(link);
+      // console.log(link);
+      await sendMagicLinkEmail(link, email);
+
       return json("ok", {
         headers: {
           "Set-Cookie": await commitSession(session),
@@ -50,24 +51,29 @@ export default function Login() {
   const actionData = useActionData<any>();
   return (
     <div className="text-center mt-36">
-      <h1 className="text-3xl mb-8">Remix Recipes</h1>
-      <form method="post" className="mx-auto md:w-1/3">
-        <div className="text-left pb-4">
-          <input
-            type="email"
-            name="email"
-            placeholder="Email"
-            autoComplete="off"
-            defaultValue={actionData?.email}
-            className={classNames(
-              "w-full outline-none border-2 border-gray-200",
-              "focus:border-primary rounded-md p-2"
-            )}
-          />
-          <ErrorMessage>{actionData?.errors?.email}</ErrorMessage>
+      {actionData === "ok" ? (
+        <div>
+          <h1 className="text-2xl py-8">Yum!</h1>
+          <p>Check your email and follow the link.</p>
         </div>
-        <PrimaryButton className="w-1/3 mx-auto">Log In</PrimaryButton>
-      </form>
+      ) : (
+        <div>
+          <h1 className="text-3xl mb-8">Remix Recipes</h1>
+          <form method="post" className="mx-auto md:w-1/3">
+            <div className="text-left pb-4">
+              <PrimaryInput
+                type="email"
+                name="email"
+                placeholder="Email"
+                autoComplete="off"
+                defaultValue={actionData?.email}
+              />
+              <ErrorMessage>{actionData?.errors?.email}</ErrorMessage>
+            </div>
+            <PrimaryButton className="w-1/3 mx-auto">Log In</PrimaryButton>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
