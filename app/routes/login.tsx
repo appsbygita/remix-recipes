@@ -1,21 +1,47 @@
-import { json, type ActionFunctionArgs } from "@remix-run/node";
+import {
+  json,
+  type ActionFunctionArgs,
+  type LoaderFunctionArgs,
+} from "@remix-run/node";
 import { useActionData } from "@remix-run/react";
 import { z } from "zod";
 import { ErrorMessage, PrimaryButton } from "~/components/form";
+import { generateMagicLink } from "~/magic-links.server";
+import { commitSession, getSession } from "~/sessions";
 import { classNames } from "~/utils/misc";
 import { validateForm } from "~/utils/validation";
+import { v4 as uuid } from "uuid";
 
 const loginSchema = z.object({
   email: z.string().email(),
 });
 
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const cookieHeader = request.headers.get("cookie");
+  const session = await getSession(cookieHeader);
+  console.log("Session = ", session.data);
+  return null;
+};
+
 export const action = async ({ request }: ActionFunctionArgs) => {
+  const cookieHeader = request.headers.get("cookie");
+  const session = await getSession(cookieHeader);
   const formData = await request.formData();
 
   return validateForm(
     formData,
     loginSchema,
-    ({ email }) => {},
+    async ({ email }) => {
+      const nonce = uuid();
+      session.flash("nonce", nonce);
+      const link = generateMagicLink(email, nonce);
+      console.log(link);
+      return json("ok", {
+        headers: {
+          "Set-Cookie": await commitSession(session),
+        },
+      });
+    },
     (errors) => json({ errors, email: formData.get("email") }, { status: 400 })
   );
 };
