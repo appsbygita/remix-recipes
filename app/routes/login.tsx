@@ -10,19 +10,20 @@ import { generateMagicLink, sendMagicLinkEmail } from "~/magic-links.server";
 import { commitSession, getSession } from "~/sessions";
 import { validateForm } from "~/utils/validation";
 import { v4 as uuid } from "uuid";
+import { requireLoggedOutUser } from "~/utils/auth.server";
 
 const loginSchema = z.object({
   email: z.string().email(),
 });
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const cookieHeader = request.headers.get("cookie");
-  const session = await getSession(cookieHeader);
-  console.log("Session = ", session.data);
+  await requireLoggedOutUser(request);
   return null;
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
+  await requireLoggedOutUser(request);
+
   const cookieHeader = request.headers.get("cookie");
   const session = await getSession(cookieHeader);
   const formData = await request.formData();

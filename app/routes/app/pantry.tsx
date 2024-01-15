@@ -5,22 +5,30 @@ import {
 } from "@remix-run/node";
 import {
   Form,
+  isRouteErrorResponse,
   useFetcher,
   useLoaderData,
   useNavigation,
+  useRouteError,
   useSearchParams,
 } from "@remix-run/react";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { DeleteButton, ErrorMessage, PrimaryButton } from "~/components/form";
 import { PlusIcon, SaveIcon, SearchIcon, TrashIcon } from "~/components/icons";
-import { createShelfItem, deleteShelfItem } from "~/models/pantry-item.server";
+import {
+  createShelfItem,
+  deleteShelfItem,
+  getShelfItem,
+} from "~/models/pantry-item.server";
 import {
   createShelf,
   deleteShelf,
   getAllShelves,
+  getShelf,
   saveShelfName,
 } from "~/models/pantry-shelf.server";
+import { requireLoggedInUser } from "~/utils/auth.server";
 import { classNames, useIsHydrated, useServerLayoutEffect } from "~/utils/misc";
 import { validateForm } from "~/utils/validation";
 
@@ -29,9 +37,11 @@ type LoaderData = {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  const user = await requireLoggedInUser(request);
+
   const url = new URL(request.url);
   const q = url.searchParams.get("q");
-  const shelves = await getAllShelves(q);
+  const shelves = await getAllShelves(user.id, q);
   return json({ shelves });
 }
 
@@ -54,16 +64,27 @@ const deleteShelfItemSchema = z.object({
 });
 
 export const action = async ({ request }: ActionFunctionArgs) => {
+  const user = await requireLoggedInUser(request);
+
   const formData = await request.formData();
   switch (formData.get("_action")) {
     case "createShelf": {
-      return createShelf();
+      return createShelf(user.id);
     }
     case "deleteShelf": {
       return validateForm(
         formData,
         deleteShelfSchema,
-        (data) => deleteShelf(data.shelfId),
+        async (data) => {
+          const shelf = await getShelf(data.shelfId);
+          if (shelf !== null && shelf.userId !== user.id) {
+            throw json(
+              { message: "This shelf belongs to another user" },
+              { status: 401 }
+            );
+          }
+          return deleteShelf(data.shelfId);
+        },
         (errors) => json({ errors }, { status: 400 })
       );
     }
@@ -71,7 +92,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return validateForm(
         formData,
         saveShelfNameSchema,
-        (data) => saveShelfName(data.shelfId, data.shelfName),
+        async (data) => {
+          const shelf = await getShelf(data.shelfId);
+          if (shelf !== null && shelf.userId !== user.id) {
+            throw json(
+              { message: "This shelf belongs to another user" },
+              { status: 401 }
+            );
+          }
+          return saveShelfName(data.shelfId, data.shelfName);
+        },
         (errors) => json({ errors }, { status: 400 })
       );
     }
@@ -79,7 +109,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return validateForm(
         formData,
         createShelfItemSchema,
-        (data) => createShelfItem(data.shelfId, data.itemName),
+        (data) => createShelfItem(user.id, data.shelfId, data.itemName),
         (errors) => json({ errors }, { status: 400 })
       );
     }
@@ -87,7 +117,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return validateForm(
         formData,
         deleteShelfItemSchema,
-        (data) => deleteShelfItem(data.itemId),
+        async (data) => {
+          const item = await getShelfItem(data.itemId);
+          if (item !== null && item.userId !== user.id) {
+            throw json(
+              { message: "This item belongs to another user" },
+              { status: 401 }
+            );
+          }
+          return deleteShelfItem(data.itemId);
+        },
         (errors) => json({ errors }, { status: 400 })
       );
     }
@@ -392,4 +431,24 @@ function useOptimisticItems(
 
 function createItemId() {
   return `${Math.round(Math.random() * 1_000_000)}`;
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  if (isRouteErrorResponse(error)) {
+    return (
+      <div className="bg-red-600  text-white rounded-md p-4">
+        <h1 className="mb-2">
+          {error.status} - {error.statusText}
+        </h1>
+        <p>{error.data.message}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-red-600  text-white rounded-md p-4">
+      <h1 className="mb-2">An unexpected error occurred</h1>
+    </div>
+  );
 }

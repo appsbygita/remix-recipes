@@ -1,9 +1,10 @@
 import db from "~/db.server";
 import { handleDelete } from "./utils";
 
-export function getAllShelves(query: string | null) {
+export function getAllShelves(userId: string, query: string | null) {
   return db.pantryShelf.findMany({
     where: {
+      userId,
       name: {
         contains: query ?? "",
         mode: "insensitive",
@@ -22,9 +23,10 @@ export function getAllShelves(query: string | null) {
   });
 }
 
-export function createShelf() {
+export function createShelf(userId: string) {
   return db.pantryShelf.create({
     data: {
+      userId,
       name: "New Shelf",
     },
   });
@@ -49,4 +51,8 @@ export function saveShelfName(shelfId: string, shelfName: string) {
       name: shelfName,
     },
   });
+}
+
+export function getShelf(id: string) {
+  return db.pantryShelf.findUnique({ where: { id } });
 }

@@ -7,20 +7,29 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  isRouteErrorResponse,
+  useLoaderData,
   useNavigation,
   useResolvedPath,
   useRouteError,
 } from "@remix-run/react";
-import type { LinksFunction, MetaFunction } from "@remix-run/node";
+import {
+  json,
+  type LinksFunction,
+  type LoaderFunctionArgs,
+  type MetaFunction,
+} from "@remix-run/node";
 import styles from "./tailwind.css";
 import {
   DiscoverIcon,
   HomeIcon,
   LoginIcon,
+  LogoutIcon,
   RecipeBookIcon,
   SettingsIcon,
 } from "./components/icons";
 import classNames from "classnames";
+import { getCurrentUser } from "./utils/auth.server";
 
 export const meta: MetaFunction = () => {
   return [
@@ -33,7 +42,14 @@ export const links: LinksFunction = () => {
   return [{ rel: "stylesheet", href: styles }];
 };
 
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const user = await getCurrentUser(request);
+
+  return json({ isLoggedIn: user !== null });
+};
+
 export default function App() {
+  const data = useLoaderData<typeof loader>();
   return (
     <html lang="en">
       <head>
@@ -56,17 +72,25 @@ export default function App() {
             <AppNavLink to="discover">
               <DiscoverIcon />
             </AppNavLink>
-            <AppNavLink to="app">
-              <RecipeBookIcon />
-            </AppNavLink>
+            {data.isLoggedIn ? (
+              <AppNavLink to="app/pantry">
+                <RecipeBookIcon />
+              </AppNavLink>
+            ) : null}
             <AppNavLink to="settings">
               <SettingsIcon />
             </AppNavLink>
           </ul>
           <ul>
-            <AppNavLink to="/login">
-              <LoginIcon />
-            </AppNavLink>
+            {data.isLoggedIn ? (
+              <AppNavLink to="/logout">
+                <LogoutIcon />
+              </AppNavLink>
+            ) : (
+              <AppNavLink to="/login">
+                <LoginIcon />
+              </AppNavLink>
+            )}
           </ul>
         </nav>
         <div className="p-4 w-full md:w-[calc(100%-4rem)]">
@@ -125,11 +149,25 @@ export function ErrorBoundary() {
       </head>
       <body>
         <div className="p-4">
-          <h1 className="text-2xl pb-3">Whoops!</h1>
-          <p>You're seeing this page because an unexpected error occurred.</p>
-          {error instanceof Error ? (
-            <p className="my-4 font-bold">{error.message}</p>
-          ) : null}
+          {isRouteErrorResponse(error) ? (
+            <>
+              <h1 className="text-2xl pb-3">
+                {error.status} - {error.statusText}
+              </h1>
+              <p>You're seeing this page because an error occurred.</p>
+              <p className="my-4 font-bold">{error.data.message}</p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl pb-3">Whoops!</h1>
+              <p>
+                You're seeing this page because an unexpected error occurred.
+              </p>
+              {error instanceof Error ? (
+                <p className="my-4 font-bold">{error.message}</p>
+              ) : null}
+            </>
+          )}
           <Link to="/" className="text-primary">
             Take me home
           </Link>
