@@ -2,8 +2,15 @@ import {
   type ActionFunctionArgs,
   json,
   type LoaderFunctionArgs,
+  redirect,
 } from "@remix-run/node";
-import { Form, useActionData, useLoaderData } from "@remix-run/react";
+import {
+  Form,
+  isRouteErrorResponse,
+  useActionData,
+  useLoaderData,
+  useRouteError,
+} from "@remix-run/react";
 import { Fragment } from "react";
 import { z } from "zod";
 import {
@@ -14,10 +21,13 @@ import {
 } from "~/components/form";
 import { SaveIcon, TimeIcon, TrashIcon } from "~/components/icons";
 import db from "~/db.server";
+import { handleDelete } from "~/models/utils";
+import { requireLoggedInUser } from "~/utils/auth.server";
 import { classNames } from "~/utils/misc";
 import { validateForm } from "~/utils/validation";
 
-export async function loader({ params }: LoaderFunctionArgs) {
+export async function loader({ request, params }: LoaderFunctionArgs) {
+  const user = await requireLoggedInUser(request);
   const recipe = await db.recipe.findUnique({
     where: { id: params.recipeId },
     include: {
@@ -33,6 +43,16 @@ export async function loader({ params }: LoaderFunctionArgs) {
       },
     },
   });
+
+  if (recipe === null) {
+    throw json({ message: "Recipe ID not found." }, { status: 404 });
+  }
+  if (recipe.userId !== user.id) {
+    throw json(
+      { message: "You are not authorized to view this recipe." },
+      { status: 401 }
+    );
+  }
 
   return json({ recipe }, { headers: { "Cache-Control": "max-age=10" } });
 }
@@ -63,10 +83,31 @@ const createIngredientSchema = z.object({
 });
 
 export async function action({ request, params }: ActionFunctionArgs) {
-  const formData = await request.formData();
+  const user = await requireLoggedInUser(request);
   const recipeId = String(params.recipeId);
+  const recipe = await db.recipe.findUnique({ where: { id: recipeId } });
 
-  switch (formData.get("_action")) {
+  if (recipe === null) {
+    throw json({ message: "Recipe ID not found." }, { status: 404 });
+  }
+  if (recipe.userId !== user.id) {
+    throw json(
+      { message: "You are not authorized to make changes to this recipe." },
+      { status: 401 }
+    );
+  }
+
+  const formData = await request.formData();
+  const _action = formData.get("_action");
+
+  if (typeof _action === "string" && _action.includes("deleteIngredient")) {
+    const ingredientId = _action.split(".")[1];
+    return handleDelete(() =>
+      db.ingredient.delete({ where: { id: ingredientId } })
+    );
+  }
+
+  switch (_action) {
     case "saveRecipe": {
       return validateForm(
         formData,
@@ -104,6 +145,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
           }),
         (errors) => json({ errors }, { status: 400 })
       );
+    }
+    case "deleteRecipe": {
+      await handleDelete(() => db.recipe.delete({ where: { id: recipeId } }));
+      return redirect("/app/recipes");
     }
     default: {
       return null;
@@ -176,7 +221,7 @@ export default function RecipeDetail() {
                 {actionData?.errors?.[`ingredientNames.${idx}`]}
               </ErrorMessage>
             </div>
-            <button>
+            <button name="_action" value={`deleteIngredient.${ingredient.id}`}>
               <TrashIcon />
             </button>
           </Fragment>
@@ -226,11 +271,33 @@ export default function RecipeDetail() {
       <ErrorMessage>{actionData?.errors?.instructions}</ErrorMessage>
       <hr className="my-4" />
       <div className="flex justify-between">
-        <DeleteButton>Delete this Recipe</DeleteButton>
+        <DeleteButton name="_action" value="deleteRecipe">
+          Delete this Recipe
+        </DeleteButton>
         <PrimaryButton name="_action" value="saveRecipe">
           <div className="flex flex-col justify-center h-full">Save</div>
         </PrimaryButton>
       </div>
     </Form>
+  );
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  if (isRouteErrorResponse(error)) {
+    return (
+      <div className="bg-red-600  text-white rounded-md p-4">
+        <h1 className="mb-2">
+          {error.status} - {error.statusText}
+        </h1>
+        <p>{error.data.message}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-red-600  text-white rounded-md p-4">
+      <h1 className="mb-2">An unexpected error occurred</h1>
+    </div>
   );
 }
