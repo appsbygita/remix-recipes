@@ -8,6 +8,7 @@ import {
   Form,
   isRouteErrorResponse,
   useActionData,
+  useFetcher,
   useLoaderData,
   useRouteError,
 } from "@remix-run/react";
@@ -23,7 +24,7 @@ import { SaveIcon, TimeIcon, TrashIcon } from "~/components/icons";
 import db from "~/db.server";
 import { handleDelete } from "~/models/utils";
 import { requireLoggedInUser } from "~/utils/auth.server";
-import { classNames } from "~/utils/misc";
+import { classNames, useDebouncedFunction } from "~/utils/misc";
 import { validateForm } from "~/utils/validation";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
@@ -57,19 +58,41 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   return json({ recipe }, { headers: { "Cache-Control": "max-age=10" } });
 }
 
+const saveNameSchema = z.object({
+  name: z.string().min(1, "Name cannot be blank"),
+});
+
+const saveTotalTimeSchema = z.object({
+  totalTime: z.string().min(1, "Total time cannot be blank"),
+});
+
+const saveInstructionsSchema = z.object({
+  instructions: z.string().min(1, "Instructions cannot be blank"),
+});
+
+const ingredientId = z.string().min(1, "Ingredient ID is missing");
+const ingredientAmount = z.string().nullable();
+const ingredientName = z.string().min(1, "Name cannot be blank");
+
+const saveIngredientAmountSchema = z.object({
+  amount: ingredientAmount,
+  id: ingredientId,
+});
+
+const saveIngredientNameSchema = z.object({
+  name: ingredientName,
+  id: ingredientId,
+});
+
 const saveRecipeSchema = z
   .object({
-    name: z.string().min(1, "Name cannot be blank"),
-    totalTime: z.string().min(1, "Total time cannot be blank"),
-    instructions: z.string().min(1, "Instructions cannot be blank"),
-    ingredientIds: z
-      .array(z.string().min(1, "Ingredient ID is missing"))
-      .optional(),
-    ingredientAmounts: z.array(z.string().nullable()).optional(),
-    ingredientNames: z
-      .array(z.string().min(1, "Name cannot be blank"))
-      .optional(),
+    ingredientIds: z.array(ingredientId).optional(),
+    ingredientAmounts: z.array(ingredientAmount).optional(),
+    ingredientNames: z.array(ingredientName).optional(),
   })
+  .and(saveNameSchema)
+  .and(saveTotalTimeSchema)
+  .and(saveInstructionsSchema)
   .refine(
     (data) =>
       data.ingredientIds?.length === data.ingredientAmounts?.length &&
@@ -150,6 +173,54 @@ export async function action({ request, params }: ActionFunctionArgs) {
       await handleDelete(() => db.recipe.delete({ where: { id: recipeId } }));
       return redirect("/app/recipes");
     }
+    case "saveName": {
+      return validateForm(
+        formData,
+        saveNameSchema,
+        (data) => db.recipe.update({ where: { id: recipeId }, data }),
+        (errors) => json({ errors }, { status: 400 })
+      );
+    }
+    case "saveTotalTime": {
+      return validateForm(
+        formData,
+        saveTotalTimeSchema,
+        (data) => db.recipe.update({ where: { id: recipeId }, data }),
+        (errors) => json({ errors }, { status: 400 })
+      );
+    }
+    case "saveInstructions": {
+      return validateForm(
+        formData,
+        saveInstructionsSchema,
+        (data) => db.recipe.update({ where: { id: recipeId }, data }),
+        (errors) => json({ errors }, { status: 400 })
+      );
+    }
+    case "saveIngredientAmount": {
+      return validateForm(
+        formData,
+        saveIngredientAmountSchema,
+        ({ id, amount }) =>
+          db.ingredient.update({
+            where: { id },
+            data: { amount: String(amount) },
+          }),
+        (errors) => json({ errors }, { status: 400 })
+      );
+    }
+    case "saveIngredientName": {
+      return validateForm(
+        formData,
+        saveIngredientNameSchema,
+        ({ id, name }) =>
+          db.ingredient.update({
+            where: { id },
+            data: { name },
+          }),
+        (errors) => json({ errors }, { status: 400 })
+      );
+    }
     default: {
       return null;
     }
@@ -159,6 +230,43 @@ export async function action({ request, params }: ActionFunctionArgs) {
 export default function RecipeDetail() {
   const data = useLoaderData<typeof loader>();
   const actionData = useActionData<any>();
+  const saveNameFetcher = useFetcher<any>();
+  const saveTotalTimeFetcher = useFetcher<any>();
+  const saveInstructionsFetcher = useFetcher<any>();
+
+  const saveName = useDebouncedFunction(
+    (name: string) =>
+      saveNameFetcher.submit(
+        {
+          _action: "saveName",
+          name,
+        },
+        { method: "post" }
+      ),
+    1000
+  );
+  const saveTotalTime = useDebouncedFunction(
+    (totalTime: string) =>
+      saveTotalTimeFetcher.submit(
+        {
+          _action: "saveTotalTime",
+          totalTime,
+        },
+        { method: "post" }
+      ),
+    1000
+  );
+  const saveInstructions = useDebouncedFunction(
+    (instructions: string) =>
+      saveInstructionsFetcher.submit(
+        {
+          _action: "saveInstructions",
+          instructions,
+        },
+        { method: "post" }
+      ),
+    1000
+  );
 
   return (
     <Form method="post" reloadDocument>
@@ -171,9 +279,14 @@ export default function RecipeDetail() {
           className="text-2xl font-extrabold"
           name="name"
           defaultValue={data.recipe?.name}
-          error={!!actionData?.errors?.name}
+          error={
+            !!(saveNameFetcher?.data?.errors?.name || actionData?.errors?.name)
+          }
+          onChange={(e) => saveName(e.target.value)}
         />
-        <ErrorMessage>{actionData?.errors?.name}</ErrorMessage>
+        <ErrorMessage>
+          {saveNameFetcher?.data?.errors?.name || actionData?.errors?.name}
+        </ErrorMessage>
       </div>
       <div className="flex">
         <TimeIcon />
@@ -185,9 +298,18 @@ export default function RecipeDetail() {
             autoComplete="off"
             name="totalTime"
             defaultValue={data.recipe?.totalTime}
-            error={!!actionData?.errors?.totalTime}
+            error={
+              !!(
+                saveTotalTimeFetcher?.data?.errors?.totalTime ||
+                actionData?.errors?.totalTime
+              )
+            }
+            onChange={(e) => saveTotalTime(e.target.value)}
           />
-          <ErrorMessage>{actionData?.errors?.totalTime}</ErrorMessage>
+          <ErrorMessage>
+            {saveTotalTimeFetcher?.data?.errors?.totalTime ||
+              actionData?.errors?.totalTime}
+          </ErrorMessage>
         </div>
       </div>
       <div className="grid grid-cols-[30%_auto_min-content] my-4 gap-2">
@@ -195,36 +317,14 @@ export default function RecipeDetail() {
         <h2 className="font-bold text-sm pb-1">Name</h2>
         <div></div>
         {data.recipe?.ingredients.map((ingredient, idx) => (
-          <Fragment key={ingredient.id}>
-            <input type="hidden" name="ingredientIds[]" value={ingredient.id} />
-            <div>
-              <Input
-                type="text"
-                autoComplete="off"
-                name="ingredientAmounts[]"
-                defaultValue={ingredient.amount ?? ""}
-                error={!!actionData?.errors?.[`ingredientAmounts.${idx}`]}
-              />
-              <ErrorMessage>
-                {actionData?.errors?.[`ingredientAmounts.${idx}`]}
-              </ErrorMessage>
-            </div>
-            <div>
-              <Input
-                type="text"
-                autoComplete="off"
-                name="ingredientNames[]"
-                defaultValue={ingredient.name}
-                error={!!actionData?.errors?.[`ingredientNames.${idx}`]}
-              />
-              <ErrorMessage>
-                {actionData?.errors?.[`ingredientNames.${idx}`]}
-              </ErrorMessage>
-            </div>
-            <button name="_action" value={`deleteIngredient.${ingredient.id}`}>
-              <TrashIcon />
-            </button>
-          </Fragment>
+          <IngredientRow
+            key={ingredient.id}
+            id={ingredient.id}
+            amount={ingredient.amount}
+            name={ingredient.name}
+            amountError={actionData?.errors?.[`ingredientAmounts.${idx}`]}
+            nameError={actionData?.errors?.[`ingredientNames.${idx}`]}
+          />
         ))}
         <div>
           <Input
@@ -265,10 +365,17 @@ export default function RecipeDetail() {
         className={classNames(
           "w-full h-56 rounded-md outline-none",
           "focus:border-2 focus:p-3 focus:border-primary duration-300",
-          actionData?.errors?.instructions ? "border-2 border-red-500 p-3" : ""
+          saveInstructionsFetcher?.data?.errors?.instructions ||
+            actionData?.errors?.instructions
+            ? "border-2 border-red-500 p-3"
+            : ""
         )}
+        onChange={(e) => saveInstructions(e.target.value)}
       />
-      <ErrorMessage>{actionData?.errors?.instructions}</ErrorMessage>
+      <ErrorMessage>
+        {saveInstructionsFetcher?.data?.errors?.instructions ||
+          actionData?.errors?.instructions}
+      </ErrorMessage>
       <hr className="my-4" />
       <div className="flex justify-between">
         <DeleteButton name="_action" value="deleteRecipe">
@@ -279,6 +386,85 @@ export default function RecipeDetail() {
         </PrimaryButton>
       </div>
     </Form>
+  );
+}
+
+type IngredientRowProps = {
+  id: string;
+  amount: string | null;
+  amountError?: string;
+  name: string;
+  nameError?: string;
+};
+
+function IngredientRow({
+  id,
+  amount,
+  amountError,
+  name,
+  nameError,
+}: IngredientRowProps) {
+  const saveAmountFetcher = useFetcher<any>();
+  const saveNameFetcher = useFetcher<any>();
+
+  const saveAmount = useDebouncedFunction(
+    (amount: string) =>
+      saveAmountFetcher.submit(
+        {
+          _action: "saveIngredientAmount",
+          amount,
+          id,
+        },
+        { method: "post" }
+      ),
+    1000
+  );
+  const saveName = useDebouncedFunction(
+    (name: string) =>
+      saveNameFetcher.submit(
+        {
+          _action: "saveIngredientName",
+          name,
+          id,
+        },
+        { method: "post" }
+      ),
+    1000
+  );
+
+  return (
+    <Fragment>
+      <input type="hidden" name="ingredientIds[]" value={id} />
+      <div>
+        <Input
+          type="text"
+          autoComplete="off"
+          name="ingredientAmounts[]"
+          defaultValue={amount ?? ""}
+          error={!!(saveAmountFetcher.data?.errors?.amount ?? amountError)}
+          onChange={(e) => saveAmount(e.target.value)}
+        />
+        <ErrorMessage>
+          {saveAmountFetcher.data?.errors?.amount ?? amountError}
+        </ErrorMessage>
+      </div>
+      <div>
+        <Input
+          type="text"
+          autoComplete="off"
+          name="ingredientNames[]"
+          defaultValue={name}
+          error={!!(saveNameFetcher.data?.errors?.name ?? nameError)}
+          onChange={(e) => saveName(e.target.value)}
+        />
+        <ErrorMessage>
+          {saveNameFetcher.data?.errors?.name ?? nameError}
+        </ErrorMessage>
+      </div>
+      <button name="_action" value={`deleteIngredient.${id}`}>
+        <TrashIcon />
+      </button>
+    </Fragment>
   );
 }
 
