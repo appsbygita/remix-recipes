@@ -3,6 +3,10 @@ import {
   json,
   type LoaderFunctionArgs,
   redirect,
+  unstable_parseMultipartFormData,
+  unstable_composeUploadHandlers,
+  unstable_createFileUploadHandler,
+  unstable_createMemoryUploadHandler,
 } from "@remix-run/node";
 import {
   Form,
@@ -90,6 +94,7 @@ const saveIngredientNameSchema = z.object({
 
 const saveRecipeSchema = z
   .object({
+    imageUrl: z.string().optional(),
     ingredientIds: z.array(ingredientId).optional(),
     ingredientAmounts: z.array(ingredientAmount).optional(),
     ingredientNames: z.array(ingredientName).optional(),
@@ -124,7 +129,21 @@ export async function action({ request, params }: ActionFunctionArgs) {
     );
   }
 
-  const formData = await request.formData();
+  let formData;
+  if (request.headers.get("Content-Type")?.includes("multipart/form-data")) {
+    const uploadHandler = unstable_composeUploadHandlers(
+      unstable_createFileUploadHandler({ directory: "public/images" }),
+      unstable_createMemoryUploadHandler()
+    );
+    formData = await unstable_parseMultipartFormData(request, uploadHandler);
+    const image = formData.get("image") as File;
+    if (image.size !== 0) {
+      formData.set("imageUrl", `/images/${image.name}`);
+    }
+  } else {
+    formData = await request.formData();
+  }
+
   const _action = formData.get("_action");
 
   if (typeof _action === "string" && _action.includes("deleteIngredient")) {
@@ -298,7 +317,7 @@ export default function RecipeDetail() {
   };
 
   return (
-    <Form method="post" reloadDocument>
+    <Form method="post" encType="multipart/form-data" reloadDocument>
       <button name="_action" value="saveRecipe" className="hidden" />
       <div className="mb-2">
         <Input
@@ -457,6 +476,18 @@ export default function RecipeDetail() {
         {saveInstructionsFetcher?.data?.errors?.instructions ||
           actionData?.errors?.instructions}
       </ErrorMessage>
+      <label
+        htmlFor="image"
+        className="block font-bold text-sm pb-2 w-fit mt-4"
+      >
+        Image
+      </label>
+      <input
+        id="image"
+        type="file"
+        name="image"
+        key={`${data.recipe?.id}.image`}
+      />
       <hr className="my-4" />
       <div className="flex justify-between">
         <DeleteButton name="_action" value="deleteRecipe">
