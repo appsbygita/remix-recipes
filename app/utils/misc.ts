@@ -1,4 +1,4 @@
-import { useMatches } from "@remix-run/react";
+import { useLocation, useMatches } from "@remix-run/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 export function classNames(...names: Array<string | undefined>) {
@@ -52,4 +52,15 @@ export function useDebouncedFunction<T extends Array<any>>(
   };
 
   return debouncedFn;
+}
+
+export function useBuildSearchParams() {
+  const location = useLocation();
+
+  return (name: string, value: string) => {
+    const searchParams = new URLSearchParams(location.search);
+    searchParams.set(name, value);
+
+    return `?${searchParams.toString()}`;
+  };
 }

@@ -6,15 +6,17 @@ import {
 } from "@remix-run/node";
 import {
   Form,
+  Link,
   NavLink,
   Outlet,
   useFetchers,
   useLoaderData,
   useLocation,
   useNavigation,
+  useSearchParams,
 } from "@remix-run/react";
 import { PrimaryButton, SearchBar } from "~/components/form";
-import { PlusIcon } from "~/components/icons";
+import { CalendarIcon, PlusIcon } from "~/components/icons";
 import {
   RecipeCard,
   RecipeDetailWrapper,
@@ -23,17 +25,27 @@ import {
 } from "~/components/recipes";
 import db from "~/db.server";
 import { requireLoggedInUser } from "~/utils/auth.server";
+import { classNames, useBuildSearchParams } from "~/utils/misc";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = await requireLoggedInUser(request);
   const url = new URL(request.url);
   const q = url.searchParams.get("q");
+  const filter = url.searchParams.get("filter");
+
   const recipes = await db.recipe.findMany({
     where: {
       userId: user.id,
       name: { contains: q ?? "", mode: "insensitive" },
+      mealPlanMultiplier: filter === "mealPlanOnly" ? { not: null } : {},
     },
-    select: { name: true, totalTime: true, imageUrl: true, id: true },
+    select: {
+      name: true,
+      totalTime: true,
+      imageUrl: true,
+      id: true,
+      mealPlanMultiplier: true,
+    },
     orderBy: {
       createdAt: "desc",
     },
@@ -66,11 +78,29 @@ export default function Recipes() {
   const location = useLocation();
   const navigation = useNavigation();
   const fetchers = useFetchers();
+  const buildSearchParams = useBuildSearchParams();
+  const [searchParams] = useSearchParams();
+  const mealPlanOnlyFilterOn = searchParams.get("filter") === "mealPlanOnly";
 
   return (
     <RecipePageWrapper>
       <RecipeListWrapper>
-        <SearchBar placeholder="Search Recipes..." />
+        <div className="flex gap-4">
+          <SearchBar placeholder="Search Recipes..." className="flex-grow" />
+          <Link
+            reloadDocument
+            to={buildSearchParams(
+              "filter",
+              mealPlanOnlyFilterOn ? "" : "mealPlanOnly"
+            )}
+            className={classNames(
+              "flex flex-col justify-center border-2 border-primary rounded-md px-2",
+              mealPlanOnlyFilterOn ? "text-white bg-primary" : "text-primary"
+            )}
+          >
+            <CalendarIcon />
+          </Link>
+        </div>
         <Form method="post" className="mt-4" reloadDocument>
           <PrimaryButton className="w-full">
             <div className="flex w-full justify-center">
@@ -110,6 +140,7 @@ export default function Recipes() {
                       totalTime={
                         optimisticData.get("totalTime") ?? recipe.totalTime
                       }
+                      mealPlanMultiplier={recipe.mealPlanMultiplier}
                       imageUrl={recipe.imageUrl}
                       isActive={isActive}
                       isLoading={isLoading}
