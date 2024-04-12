@@ -39,7 +39,10 @@ export const meta: MetaFunction = () => {
 };
 
 export const links: LinksFunction = () => {
-  return [{ rel: "stylesheet", href: styles }];
+  return [
+    { rel: "stylesheet", href: "/theme.css" },
+    { rel: "stylesheet", href: styles },
+  ];
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
