@@ -22,7 +22,6 @@ import {
 import styles from "./tailwind.css";
 import {
   DiscoverIcon,
-  HomeIcon,
   LoginIcon,
   LogoutIcon,
   RecipeBookIcon,
@@ -69,9 +68,6 @@ export default function App() {
           )}
         >
           <ul className="flex md:flex-col">
-            <AppNavLink to="/">
-              <HomeIcon />
-            </AppNavLink>
             <AppNavLink to="discover">
               <DiscoverIcon />
             </AppNavLink>
