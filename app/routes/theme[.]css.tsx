@@ -55,6 +55,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
   `;
   return new Response(data, {
-    headers: { "content-type": "text/css" },
+    headers: { "content-type": "text/css", "last-modified": "March 4, 2024" },
   });
 }
